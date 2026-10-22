@@ -1,0 +1,271 @@
+ML EXPERIMENTS — MINIMAL CODE, ORIGINAL OUTPUTS RETAINED
+Order: Experiment 10 to Experiment 1
+
+Important:
+• SVM: keeps the two confusion matrices only; removes Linear/RBF decision-boundary graphs as requested.
+• Other original plots, charts, ROC curve, BFS/A* visualizations, and Minimax tree are retained.
+• Matrices and charts are generated from model predictions/data, not manually entered.
+• Uses the same datasets, random seeds, and main settings visible in the supplied PDF wherever readable.
+
+============================================================
+EXPERIMENT 10 — SVM (LINEAR AND RBF)
+============================================================
+import matplotlib.pyplot as plt
+from sklearn.datasets import make_moons
+from sklearn.model_selection import train_test_split
+from sklearn.svm import SVC
+from sklearn.metrics import accuracy_score, confusion_matrix, ConfusionMatrixDisplay
+
+X,y=make_moons(n_samples=200,noise=.2,random_state=42)
+Xt,Xs,yt,ys=train_test_split(X,y,test_size=.3,random_state=42)
+fig,ax=plt.subplots(1,2,figsize=(10,4))
+for a,(name,k) in zip(ax,[('Linear SVM','linear'),('RBF SVM','rbf')]):
+    m=SVC(kernel=k).fit(Xt,yt); p=m.predict(Xs)
+    print(name,'Accuracy:',accuracy_score(ys,p))
+    print('Confusion Matrix:\n',confusion_matrix(ys,p))
+    ConfusionMatrixDisplay.from_predictions(ys,p,ax=a)
+    a.set_title(name+' Confusion Matrix')
+plt.tight_layout(); plt.show()
+
+============================================================
+EXPERIMENT 9 — MINIMAX GAME TREE
+============================================================
+import math
+import matplotlib.pyplot as plt
+
+scores=[3,5,6,9,1,2,0,-1]
+h=int(math.log2(len(scores))); tree={}
+
+def minimax(d,i,is_max):
+    if d==h:
+        tree[d,i]=scores[i]; return scores[i]
+    l=minimax(d+1,2*i,not is_max)
+    r=minimax(d+1,2*i+1,not is_max)
+    tree[d,i]=max(l,r) if is_max else min(l,r)
+    return tree[d,i]
+
+best=minimax(0,0,True)
+print("Leaf Node Values:",scores)
+print("Optimal value at root:",best)
+
+pos={}
+plt.figure(figsize=(9,5))
+for d in range(h+1):
+    for i in range(2**d):
+        x=(i+.5)*8/(2**d); y=h-d; pos[d,i]=(x,y)
+        if d:
+            px,py=pos[d-1,i//2]
+            plt.plot([px,x],[py,y],'k-',zorder=1)
+        plt.scatter(x,y,s=600,color='lightblue',edgecolors='black',zorder=2)
+        plt.text(x,y,str(tree[d,i]),ha='center',va='center',fontweight='bold')
+    plt.text(-.5,h-d,('MAX' if d%2==0 else 'MIN')+f' (Level {d})',fontweight='bold')
+plt.xlim(-2,9); plt.ylim(-.8,h+.8); plt.axis('off')
+plt.title('Minimax Game Tree'); plt.show()
+
+============================================================
+EXPERIMENT 8 — BAYESIAN NETWORK
+============================================================
+# Install once if needed: %pip install pgmpy
+from pgmpy.models import DiscreteBayesianNetwork
+from pgmpy.factors.discrete import TabularCPD
+from pgmpy.inference import VariableElimination
+
+m=DiscreteBayesianNetwork([('Burglary','Alarm'),('Earthquake','Alarm'),
+                           ('Alarm','DavidCalls'),('Alarm','SophiaCalls')])
+cpds=[
+ TabularCPD('Burglary',2,[[.998],[.002]]),
+ TabularCPD('Earthquake',2,[[.999],[.001]]),
+ TabularCPD('Alarm',2,[[.999,.69,.05,.06],[.001,.31,.95,.94]],
+            evidence=['Burglary','Earthquake'],evidence_card=[2,2]),
+ TabularCPD('DavidCalls',2,[[.95,.09],[.05,.91]],evidence=['Alarm'],evidence_card=[2]),
+ TabularCPD('SophiaCalls',2,[[.98,.25],[.02,.75]],evidence=['Alarm'],evidence_card=[2])]
+m.add_cpds(*cpds)
+assert m.check_model()
+print("Bayesian Network:",list(m.edges()))
+i=VariableElimination(m)
+for q,e in [(['Earthquake'],None),(['Earthquake'],{'DavidCalls':1}),
+            (['Earthquake'],{'DavidCalls':1,'SophiaCalls':1})]:
+    print(i.query(q,evidence=e) if e else i.query(q))
+print("Manual joint probability:",.75*.91*.001*.998*.999)
+
+============================================================
+EXPERIMENT 7 — GAUSSIAN NAIVE BAYES
+============================================================
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.model_selection import train_test_split
+from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import (accuracy_score,confusion_matrix,classification_report,
+                             roc_auc_score,roc_curve)
+
+np.random.seed(42)
+X=np.random.randn(200,4); y=np.random.randint(0,2,200)
+Xt,Xs,yt,ys=train_test_split(X,y,test_size=.2,random_state=42)
+m=GaussianNB().fit(Xt,yt); p=m.predict(Xs); prob=m.predict_proba(Xs)[:,1]
+auc=roc_auc_score(ys,prob)
+print("Accuracy:",accuracy_score(ys,p),"\nROC-AUC:",auc)
+print(classification_report(ys,p))
+plt.figure(figsize=(4,3))
+sns.heatmap(confusion_matrix(ys,p),annot=True,fmt='d',cmap='Blues')
+plt.xlabel('Predicted'); plt.ylabel('Actual'); plt.title('Confusion Matrix'); plt.show()
+fpr,tpr,_=roc_curve(ys,prob)
+plt.figure(figsize=(4,3)); plt.plot(fpr,tpr,label=f'AUC = {auc:.3f}')
+plt.plot([0,1],[0,1],'--'); plt.title('ROC Curve'); plt.legend(); plt.show()
+
+============================================================
+EXPERIMENT 6 — PCA AND LOGISTIC REGRESSION
+============================================================
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.datasets import load_iris
+from sklearn.preprocessing import StandardScaler
+from sklearn.decomposition import PCA
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score,confusion_matrix
+
+iris=load_iris(); X=StandardScaler().fit_transform(iris.data)
+pca=PCA(n_components=2); Z=pca.fit_transform(X)
+print("Feature matrix:",iris.data.shape)
+print("Explained variance:",pca.explained_variance_ratio_)
+print("Total variance retained (%):",sum(pca.explained_variance_ratio_)*100)
+
+fig,(a,b)=plt.subplots(1,2,figsize=(12,5))
+a.scatter(X[:,0],X[:,1],c=iris.target,cmap='viridis',edgecolor='k')
+a.set(xlabel='Standardized Feature 1 (sepal length)',ylabel='Standardized Feature 2')
+b.scatter(Z[:,0],Z[:,1],c=iris.target,cmap='viridis',edgecolor='k')
+b.set(xlabel='Principal Component 1',ylabel='Principal Component 2',title='After PCA')
+plt.tight_layout(); plt.show()
+
+Xt,Xs,yt,ys=train_test_split(Z,iris.target,test_size=.3,random_state=42)
+p=LogisticRegression(max_iter=200).fit(Xt,yt).predict(Xs)
+print("Accuracy:",accuracy_score(ys,p))
+sns.heatmap(confusion_matrix(ys,p),annot=True,fmt='d',cmap='Blues',
+            xticklabels=iris.target_names,yticklabels=iris.target_names)
+plt.xlabel('Predicted'); plt.ylabel('Actual'); plt.title('Confusion Matrix (after PCA)')
+plt.show()
+
+ev,rat,cum=pca.explained_variance_,pca.explained_variance_ratio_*100,np.cumsum(pca.explained_variance_ratio_*100)
+for j in range(2):
+    print(f"PC{j+1}: Eigenvalue={ev[j]:.4f}, Ratio={rat[j]:.2f}%, Cumulative={cum[j]:.2f}%")
+print("Original features: 4 | Components:",pca.n_components_,"| Accuracy (%):",accuracy_score(ys,p)*100)
+
+============================================================
+EXPERIMENT 5 — HILL CLIMBING
+============================================================
+import matplotlib.pyplot as plt
+
+graph={'A':12,'B':19,'C':15,'D':8,'E':24,'F':11,'G':14}
+path=['A']
+print("Hill Climbing Start: A")
+while True:
+    n=chr(ord(path[-1])+1)
+    if n not in graph or graph[n]<=graph[path[-1]]: break
+    path.append(n)
+    print(f"Step {len(path)-1}: Current Node {n}, Objective Value: {graph[n]}")
+print("Peak state:",path[-1],"Best value:",graph[path[-1]])
+plt.plot(graph.keys(),graph.values(),'o--',color='gray',label='State Space')
+plt.plot(path,[graph[n] for n in path],'ro-',label='Search Path')
+plt.scatter(path[-1],graph[path[-1]],s=150,color='green',label='Final Peak')
+plt.xlabel('State / Node'); plt.ylabel('Objective Value')
+plt.title('Hill Climbing Trajectory'); plt.legend(); plt.show()
+
+============================================================
+EXPERIMENT 4 — A* SEARCH
+============================================================
+import heapq
+
+graph={'A':{'B':7,'C':2},'C':{'B':7,'D':5},'B':{'D':2},'D':{}}
+h={'A':12,'B':7,'C':6,'D':0}
+start,goal='A','D'
+q=[(h[start],0,start,[start])]; best={}
+while q:
+    _,cost,n,path=heapq.heappop(q)
+    if n==goal:
+        print("Final A* Path:",path,"Cost:",cost); break
+    if n in best and best[n]<=cost: continue
+    best[n]=cost
+    for nxt,w in graph[n].items():
+        nc=cost+w
+        heapq.heappush(q,(nc+h[nxt],nc,nxt,path+[nxt]))
+
+============================================================
+EXPERIMENT 3 — BREADTH-FIRST SEARCH
+============================================================
+from collections import deque
+
+graph={'A':['B','C'],'B':['D','E'],'C':['F'],'D':[],'E':[],'F':[]}
+q=deque(['A']); visited=[]
+while q:
+    n=q.popleft()
+    if n not in visited:
+        print(f"Current: {n} | Queue: {list(q)} | Visited: {visited}")
+        visited.append(n)
+        q.extend(x for x in graph[n] if x not in visited)
+print("Final BFS Traversal:",visited)
+
+============================================================
+EXPERIMENT 2 — LINEAR REGRESSION
+============================================================
+import matplotlib.pyplot as plt
+from sklearn.datasets import load_iris
+from sklearn.linear_model import LinearRegression
+
+d=load_iris(as_frame=True).frame
+X=d[['sepal length (cm)']].sample(30,random_state=42)
+y=d.loc[X.index,'petal length (cm)']
+m=LinearRegression().fit(X,y)
+print("R-value:",m.score(X,y))
+print(f"Equation: y = {m.coef_[0]:.4f}x + {m.intercept_:.4f}")
+print("Predicted petal length for sepal length 8.5:",m.predict([[8.5]])[0])
+plt.scatter(X,y,label='Actual Data')
+plt.plot(X,m.predict(X),'r-',label='Linear Regression')
+plt.xlabel('Sepal Length (cm)'); plt.ylabel('Petal Length (cm)')
+plt.title('Linear Regression: Sepal vs Petal Length (Sampled)')
+plt.legend(); plt.show()
+
+============================================================
+EXPERIMENT 1 — ARTIFICIAL NEURAL NETWORK (IRIS)
+============================================================
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from sklearn.datasets import load_iris
+from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import accuracy_score,classification_report,confusion_matrix
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
+from tensorflow.keras.utils import to_categorical
+
+d=load_iris()
+X=pd.DataFrame(d.data,columns=d.feature_names); y=d.target
+print(X.head()); print(X.info()); print(X.describe())
+fig,a=plt.subplots(1,2,figsize=(14,5))
+sns.countplot(x=y,ax=a[0]); sns.heatmap(pd.DataFrame(X).corr(),annot=True,cmap='coolwarm',ax=a[1])
+plt.tight_layout(); plt.show()
+
+X=StandardScaler().fit_transform(X); Y=to_categorical(y)
+Xt,Xs,yt,ys=train_test_split(X,Y,test_size=.2,random_state=42,stratify=y)
+m=Sequential([Dense(32,activation='relu',input_shape=(4,)),
+              Dense(16,activation='relu'),Dense(3,activation='softmax')])
+m.compile(optimizer='adam',loss='categorical_crossentropy',metrics=['accuracy'])
+h=m.fit(Xt,yt,epochs=30,batch_size=8,validation_split=.2,verbose=0)
+fig,a=plt.subplots(1,2,figsize=(14,5))
+for key in ['accuracy','val_accuracy']: a[0].plot(h.history[key],label=key)
+for key in ['loss','val_loss']: a[1].plot(h.history[key],label=key)
+for z in a: z.legend()
+plt.tight_layout(); plt.show()
+
+loss,acc=m.evaluate(Xs,ys,verbose=0); p=m.predict(Xs,verbose=0).argmax(1); t=ys.argmax(1)
+print("Test Loss:",loss,"\nTest Accuracy:",acc)
+print("Accuracy Score:",accuracy_score(t,p))
+print(classification_report(t,p,target_names=d.target_names))
+sns.heatmap(confusion_matrix(t,p),annot=True,fmt='d',cmap='Blues')
+plt.xlabel('Predicted'); plt.ylabel('Actual'); plt.show()
+print("Prediction:",d.target_names[m.predict(X[:1],verbose=0).argmax()])
+m.save('iris_model.keras')
+print("Model Saved Successfully")
